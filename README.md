@@ -1,2 +1,2 @@
 # GobelinSlayer
-Python program for extraction/creation of tapisserie/gobelin patterns from low-quality internet images.
+Python program for extraction/creation of tapestry/gobelin patterns from low-quality internet images.
