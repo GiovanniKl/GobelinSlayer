@@ -3,7 +3,7 @@ gobelins/tapisseries from (low-quality) internet images or your own
 designs made, e.g., in Windows Paint.
 
 Created by Jan Klíma on 2024/04/30.
-Updated on 2024/05/01.
+Updated on 2024/05/02.
 """
 
 import numpy as np
@@ -17,8 +17,12 @@ from sklearn.cluster import KMeans  # for color finding
 FILL = {".": 0.45, "+": 0.8}
 # FFT filter params: circle radius (default 5), replaced value (default 10.)
 FFT = {"radius": 5, "repval": 10.}
+# fixing random state of color-recognition, int or None (default: None)
+RANDOM_STATE = None
 FONT2CELL = 0.7  # filling factor of fontsize in a cell (default: 0.6)
 # path to used font TTF file (monospaced preferred, default: "consolas.ttf")
+#   (the font is not supplied by this package, you have to find a font file
+#   that suits you and put the link/path to it here)
 TTF = "consolas.ttf"
 SYMS = "abcdefghijklmnopqrstuvwxyz0123456789-+/*@#!:.ABDEFGHIJKLMNOPQRSTUVWXYZ"
 
@@ -259,7 +263,7 @@ def get_colors(image, ncolors):
     - colors - array of shape [ncolors, 3], found colors.
     - labels - array of shape [r, c], indices of 'colors'.
     """
-    clt = KMeans(n_clusters=ncolors)
+    clt = KMeans(n_clusters=ncolors, random_state=RANDOM_STATE)
     imshape = image.shape[:-1]
     clt.fit(image.reshape(-1, 3))
     return clt.cluster_centers_.astype("uint8"), clt.labels_.reshape(imshape)
