@@ -3,15 +3,12 @@ gobelins/tapisseries from (low-quality) internet images or your own
 designs made, e.g., in Windows Paint.
 
 Created by Jan Klíma on 2024/04/30.
-Updated on 2024/04/30.
+Updated on 2024/05/01.
 """
 
 import numpy as np
-from PIL import Image
-import colorsys
-import matplotlib.pyplot as plt  # just for testing
-from matplotlib.colors import LogNorm
-from scipy.signal import find_peaks  # for color finding
+from PIL import Image, ImageDraw, ImageFont
+import webcolors  # for conversion of names and hex codes (CSS3)
 from sklearn.cluster import KMeans  # for color finding
 
 # ### adjustable constants (advanced usage)
@@ -20,6 +17,10 @@ from sklearn.cluster import KMeans  # for color finding
 FILL = {".": 0.45, "+": 0.8}
 # FFT filter params: circle radius (default 5), replaced value (default 10.)
 FFT = {"radius": 5, "repval": 10.}
+FONT2CELL = 0.7  # filling factor of fontsize in a cell (default: 0.6)
+# path to used font TTF file (monospaced preferred, default: "consolas.ttf")
+TTF = "consolas.ttf"
+SYMS = "abcdefghijklmnopqrstuvwxyz0123456789-+/*@#!:.ABDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 def main():
@@ -43,7 +44,7 @@ def main():
     # int, dots per cell/grid point (affects final resolution)
     dpc = 10
     # bool, print symbols to cells? (for better clarity between colors)
-    imprintsym = False
+    imprintsym = True
     
     # ### advanced options ###
     # int, grid line thickness for 1x1 cell and 10x10 cell
@@ -54,10 +55,111 @@ def main():
     pad = 2  # int, (multiple of cellsize) space around grid and table
     kernel = "."  # string, {".", "+"} defines shape to extract color from
     filter_grid = True  # bool, filter out grid remnants?
+    #   (this may or may not work, there is no fixed random seed)
 
     # ##### DO NOT EDIT ANYTHING FURTHER DOWN (ONLY FIXES ALLOWED) #####
     pattern, colors, counts, r, c = from_raw_src(folder+"/"+read, pxpcell,
                                                  ncolors, kernel, filter_grid)
+    pattern, colors, counts = sort_colors(pattern, colors, counts)
+    syms, symcolors = get_syms(ncolors, imprintsym, colors)
+    table = get_table(ncolors, dpc, colors, counts, c, imprintsym, syms,
+                      symcolors)
+    canvas = get_canvas(dpc, r, c, pad, tgrid1, tgrid10, table.height)
+    # ### continue here (also fix random state maybe)
+
+
+def get_table(ncolors, dpc, colors, counts, c, imprintsym, syms, symcolors):
+    """Creates an image array of the color table.
+    - ncolors - int, number of colors in the pattern.
+    - dpc - int, (px) dots per cell.
+    - colors - array of ints, list colors of shape [ncolors, 3].
+    - counts - array of ints, list color occurences of shape [ncolors].
+    - c - int, (cells) number of columns in the pattern.
+    - imprintsym - bool, write help symbols to color cells?
+    - syms - str, line of symbols in the same order as 'colors'.
+    - symcolors - array of ints, list of colors for the imprinted
+        symbols in the same order as 'colors'.
+    """
+    fontsize = int(FONT2CELL*dpc*2)
+    fontpos, anchor, dpcd2 = (dpc*2-fontsize)//2, "lt", dpc//2
+    font = ImageFont.truetype(TTF, size=fontsize)
+    dummyitem = "#fafad2 lightgoldenrodyellow (1000x)"  # longest assumed line
+    linebbox = font.getbbox(dummyitem)
+    itemc = (dpc*3+linebbox[2]+1+dpcd2)  # width of an item box
+    itemr = dpc*3  # height of an item box
+    # number of table columns that fit within pattern width
+    #   (approximated, assumes all gridlines are 1 px wide)
+    nc = c*(dpc+1)//itemc
+    nr = int(np.ceil(ncolors/nc))  # corresponding number of rows
+    table = np.zeros((nr*itemr - dpc, nc*itemc, 3), dtype=np.uint8)-1
+    im = Image.fromarray(table, mode="RGB")
+
+    for ri in range(nr):
+        for ci in range(nc):
+            coi = ri*nc+ci  # color index
+            if coi >= ncolors:
+                continue  # all colors displayed already
+            im.paste(tuple(colors[coi]),
+                     box=(itemc*ci, itemr*ri, itemc*ci+dpc*2, itemr*ri+dpc*2))
+            dim = ImageDraw.Draw(im)
+            if imprintsym:
+                dim.text((itemc*ci+dpc, itemr*ri+fontpos), syms[coi],
+                         fill=tuple(symcolors[coi]), anchor="mt", font=font)
+            try:
+                fontname = webcolors.CSS3_NAMES_TO_HEX[tuple(colors[coi])]
+            except KeyError:
+                fontname = "<no webname>"
+            dim.text((itemc*ci+dpc*2+dpcd2, itemr*ri+fontpos),
+                     rgb2hex(colors[coi])+" "+fontname+f" ({counts[coi]}x)",
+                     fill=(0, 0, 0), anchor=anchor, font=font)
+    im.show()
+    return im
+
+
+def get_syms(ncolors, imprintsym, colors):
+    """Create list of symbols and their colors if needed.
+    - ncolors - int, number of colors in the pattern.
+    - imprintsym - bool, write help symbols to color cells?
+    - colors - array of ints, list colors of shape [ncolors, 3].
+    Returns:
+    syms - string, line of symbols to use.
+    symcolors - array of ints, list of colors corresponding to each
+        symbol.
+    """
+    if not imprintsym:
+        return "", []
+    syms = SYMS[:ncolors]
+    symcolors = np.zeros((ncolors, 3), dtype=np.uint8)
+    for i in range(len(syms)):
+        if rgb2hsv(colors[i])[2] > 0.5:
+            symcolors[i] = [255, 255, 255]
+        else:
+            symcolors[i] = [0, 0, 0]
+    return syms, symcolors
+
+
+def get_canvas(dpc, r, c, pad, tgrid1, tgrid10, tablerpx):
+    """Creates empty canvas of size [canvasr, canvasc, 3].
+    All inputs are ints.
+    - dpc - (px) dots per cell.
+    - r/c - (1) rows/columns of grid.
+    - pad - (cells) padding in multiples of dpc.
+    - tgrid1/tgrid10 - (px) 1x1/10x10 grid thickness.
+    - tablerpx - (px) table vertical size.
+    """
+    canvasc = 2*pad*dpc+c*(dpc+tgrid1)+np.ceil(c/10)*(tgrid10-tgrid1)
+    canvasr = 2*pad*dpc+r*(dpc+tgrid1)+np.ceil(r/10)*(tgrid10-tgrid1)+tabler
+    return np.zeros((canvasr, canvasc, 3), dtype=np.uint8)
+
+
+def sort_colors(pattern, colors, counts):
+    """Sorts the colors and updates accordingly the pattern and counts."""
+    key = np.flip(np.argsort(counts))  # sort highest to lowest occurence
+    colors0, counts0 = colors[key], counts[key]
+    pattern0 = pattern.copy()
+    for i in range(len(counts)):
+        pattern0[pattern == i] = np.nonzero(key == i)[0][0]
+    return pattern0, colors0, counts0
 
 
 def from_raw_src(src, pxpcell, ncolors, kernel, filter_grid):
@@ -101,12 +203,13 @@ def from_raw_src(src, pxpcell, ncolors, kernel, filter_grid):
     # im1.save("test1.png", "PNG")
     
     clrs, inds = get_colors(colors, ncolors)
-    pattern = clrs[inds]
+    # pattern = clrs[inds]
     cts = [np.sum(inds == i) for i in range(ncolors)]
     
     # im2 = Image.fromarray(pattern, mode="RGB")
+    # im2.show()
     # im2.save("test2.png", "PNG")
-    return pattern, clrs, cts, r, c
+    return inds, clrs, np.array(cts), r, c
 
 
 def do_filter_grid(im, pxpcell):
