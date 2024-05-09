@@ -35,18 +35,20 @@ def main():
     folder = (r"C:\Users\Jan\Documents\programování\3-1415926535897932384626"
               + r"433832791thon\gobelinSlayer")
     # name of the (future) saved file (without extension)
-    save = "sykorky0"
+    save = "kolibrici0"
     # image file to read the pattern from (located within 'folder')
-    read = "IMG-20240429-WA0003.jpg"
+    read = "IMG-20240429-WA0001_resized_to_pxpcell630d80.jpg"
     # read = "sykorky-test0_pattern_edited.png"
     # float, (px/cell) amount of pixels per one cell/stitch in the source
-    #   (accepts floats, since some images can have non-integer cells/side)
-    pxpcell = 443/120
+    #   (accepts floats, since some images can have non-integer cells/side,
+    #   but the input image must have the same pxpcell in both directions)
+    pxpcell = 630/80
     # pxpcell = 1  # for reading from a 1:1 pattern
     # int, number of colors in the image (nocolors >= 0; 0 means all)
-    ncolors = 25
+    ncolors = 21
     # bool, save just pattern? (dpc=1) (can be used for manual editing of
-    #   generated pattern before making the final image on a grid)
+    #   generated pattern before making the final image on a grid, or
+    #   for making previews, since its quite fast)
     save_just_pattern = False
     # int, minimum number of grid points for rows/columns for the final grid
     minr, minc = 20, 20
@@ -141,8 +143,12 @@ def get_image(dpc, r, c, minr, minc, pad, tgrid1, tgrid10, pattern, colors,
                     dim.text((aci+dpcd2, ari+dpcd2), syms[pattern[ri, ci]],
                              fill=tuple(symcolors[pattern[ri, ci]]),
                              anchor=anchor, font=font)
-            canvas.paste(cgridr, (aci, arf, acf+cl, arf+rl))
-            canvas.paste(cgridc, (acf, ari, acf+cl, arf+rl))
+            if (ci+1) % 10 == 0:
+                canvas.paste(cgridr, (aci, arf, acf+cl, arf+rl))
+                canvas.paste(cgridc, (acf, ari, acf+cl, arf+rl))
+            else:
+                canvas.paste(cgridc, (acf, ari, acf+cl, arf+rl))
+                canvas.paste(cgridr, (aci, arf, acf+cl, arf+rl))
             aci = acf+cl
         ari, aci = arf+rl, pad*dpc+tgrid10
     canvas.paste(table, (pad*dpc, 2*pad*dpc+r0*(dpc+tgrid1)
