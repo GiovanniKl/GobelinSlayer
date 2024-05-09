@@ -3,7 +3,7 @@ gobelins/tapisseries from (low-quality) internet images or your own
 designs made, e.g., in Windows Paint.
 
 Created by Jan Klíma on 2024/04/30.
-Updated on 2024/05/02.
+Updated on 2024/05/10.
 """
 
 import numpy as np
@@ -18,13 +18,13 @@ FILL = {".": 0.45, "+": 0.8}
 # FFT filter params: circle radius (default 5), replaced value (default 10.)
 FFT = {"radius": 5, "repval": 10.}
 # fixing random state of color-recognition, int or None (default: None)
-RANDOM_STATE = None
+RANDOM_STATE = 22863
 FONT2CELL = 0.7  # filling factor of fontsize in a cell (default: 0.6)
 # path to used font TTF file (monospaced preferred, default: "consolas.ttf")
 #   (the font is not supplied by this package, you have to find a font file
 #   that suits you and put the link/path to it here)
 TTF = "consolas.ttf"
-SYMS = "abcdefghijklmnopqrstuvwxyz0123456789-+/*@#!:.ABDEFGHIJKLMNOPQRSTUVWXYZ"
+SYMS = "abcdefghijklmnopqrstuvwxyz0123456789-+/*@#!:.ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
 def main():
@@ -35,14 +35,19 @@ def main():
     folder = (r"C:\Users\Jan\Documents\programování\3-1415926535897932384626"
               + r"433832791thon\gobelinSlayer")
     # name of the (future) saved file (without extension)
-    save = "sykorky-test0"
+    save = "sykorky0"
     # image file to read the pattern from (located within 'folder')
     read = "IMG-20240429-WA0003.jpg"
+    # read = "sykorky-test0_pattern_edited.png"
     # float, (px/cell) amount of pixels per one cell/stitch in the source
     #   (accepts floats, since some images can have non-integer cells/side)
     pxpcell = 443/120
-    # int, number of colors in the image (nocolors >= 0; 0 means automatic)
+    # pxpcell = 1  # for reading from a 1:1 pattern
+    # int, number of colors in the image (nocolors >= 0; 0 means all)
     ncolors = 25
+    # bool, save just pattern? (dpc=1) (can be used for manual editing of
+    #   generated pattern before making the final image on a grid)
+    save_just_pattern = False
     # int, minimum number of grid points for rows/columns for the final grid
     minr, minc = 20, 20
     # int, dots per cell/grid point (affects final resolution)
@@ -58,22 +63,95 @@ def main():
     cbg = "#ffffff"  # hex color, background color
     pad = 2  # int, (multiple of cellsize) space around grid and table
     kernel = "."  # string, {".", "+"} defines shape to extract color from
-    filter_grid = True  # bool, filter out grid remnants?
-    #   (this may or may not work, there is no fixed random seed)
+    filter_grid = True  # bool, filter out grid remnants? (only for pxpcell > 1)
+    #   (this may or may not work, sometimes changing random seed helps)
 
     # ##### DO NOT EDIT ANYTHING FURTHER DOWN (ONLY FIXES ALLOWED) #####
     pattern, colors, counts, r, c = from_raw_src(folder+"/"+read, pxpcell,
-                                                 ncolors, kernel, filter_grid)
+                                                 ncolors, kernel, filter_grid,
+                                                 save_just_pattern, folder+"/"
+                                                 + save)
+    if ncolors == 0:
+        ncolors = len(colors)  # finally change to real number of colors used
+    if save_just_pattern:
+        print("Pattern image saved successfully (only the 1:1 scale pattern).")
+        return  # skips all following code
     pattern, colors, counts = sort_colors(pattern, colors, counts)
     syms, symcolors = get_syms(ncolors, imprintsym, colors)
-    table = get_table(ncolors, dpc, colors, counts, c, imprintsym, syms,
-                      symcolors)
-    canvas = get_canvas(dpc, r, c, pad, tgrid1, tgrid10, table.height)
-    # ### continue here (also fix random state maybe)
+    table = get_table(ncolors, dpc, colors, counts, max((c, minc)), imprintsym,
+                      syms, symcolors)
+    image = get_image(dpc, r, c, minr, minc, pad, tgrid1, tgrid10, pattern,
+                      colors, table, imprintsym, syms, symcolors, cbg, cgrid1,
+                      cgrid10)
+    image.save(folder+"/"+save+".png")
+    image.close()  # release memory
+    print("Image saved successfully.")
+
+
+def get_image(dpc, r, c, minr, minc, pad, tgrid1, tgrid10, pattern, colors,
+              table, imprintsym, syms, symcolors, cbg, cgrid1, cgrid10):
+    """Creates the final image. First creates empty canvas of size
+    [canvasr, canvasc, 3], then paints all pattern stuff, and pastes the
+    table. Returns an Image.
+    - dpc - int, (px) dots per cell.
+    - r/c - ints, rows/columns of grid.
+    - minr/minc - ints, minimum number of rows/columns in the final grid.
+    - pad - int, (cells) padding in multiples of dpc.
+    - tgrid1/tgrid10 - ints, (px) 1x1/10x10 grid thickness.
+    - pattern - 2darray of ints, array of color indices making the pattern.
+    - colors - array of ints, list colors of shape [ncolors, 3].
+    - table - Image, color table image.
+    - imprintsym - bool, write help symbols to color cells?
+    - syms - str, line of symbols in the same order as 'colors'.
+    - symcolors - array of ints, list of colors for the imprinted
+        symbols in the same order as 'colors'.
+    - cbg - hex string, background color.
+    - cgrid1/cgrid10 - hex strings, 1x1/10x10 grid color.
+    """
+    c0, r0 = max((c, minc)), max((r, minr))
+    canvasc = int(2*pad*dpc+c0*(dpc+tgrid1)+np.ceil(c0/10)*(tgrid10-tgrid1))
+    canvasr = int(3*pad*dpc+r0*(dpc+tgrid1)+np.ceil(r0/10)*(tgrid10-tgrid1)
+                  + table.height)
+    canvas = np.zeros((canvasr, canvasc, 3), dtype=np.uint8)
+    canvas[:, :] = hex2rgb(cbg)  # put background color everywhere
+    # print(canvas)  # see if line above works
+    # draw top and left grid lines
+    canvas[pad*dpc:pad*dpc+tgrid10, pad*dpc:pad*dpc+c0*(dpc+tgrid1)+tgrid10
+           + int(np.ceil(c0/10))*(tgrid10-tgrid1)] = hex2rgb(cgrid10)
+    canvas[pad*dpc:pad*dpc+r0*(dpc+tgrid1)+int(np.ceil(r0/10))*(tgrid10-tgrid1)
+           + tgrid10, pad*dpc:pad*dpc+tgrid10] = hex2rgb(cgrid10)
+    
+    canvas = Image.fromarray(canvas)
+    ari, aci = pad*dpc+tgrid10, pad*dpc+tgrid10  # initial row/col index of cell
+    fontsize = int(FONT2CELL*dpc)
+    anchor, dpcd2 = "mm", dpc//2
+    font = ImageFont.truetype(TTF, size=fontsize)
+    for ri in range(r0):
+        for ci in range(c0):
+            rl = tgrid10 if (ri+1) % 10 == 0 else tgrid1
+            cl = tgrid10 if (ci+1) % 10 == 0 else tgrid1
+            cgridr = cgrid10 if (ri+1) % 10 == 0 else cgrid1
+            cgridc = cgrid10 if (ci+1) % 10 == 0 else cgrid1
+            arf, acf = ari + dpc, aci + dpc
+            if ri < r and ci < c:
+                canvas.paste(tuple(colors[pattern[ri, ci]]),
+                             (aci, ari, acf, arf))
+                if imprintsym:
+                    dim = ImageDraw.Draw(canvas)
+                    dim.text((aci+dpcd2, ari+dpcd2), syms[pattern[ri, ci]],
+                             fill=tuple(symcolors[pattern[ri, ci]]),
+                             anchor=anchor, font=font)
+            canvas.paste(cgridr, (aci, arf, acf+cl, arf+rl))
+            canvas.paste(cgridc, (acf, ari, acf+cl, arf+rl))
+            aci = acf+cl
+        ari, aci = arf+rl, pad*dpc+tgrid10
+    canvas.paste(table, (pad*dpc, 2*pad*dpc+r0*(dpc+tgrid1)
+                         + int(np.ceil(r0/10))*(tgrid10-tgrid1)))
+    return canvas
 
 
 def get_table(ncolors, dpc, colors, counts, c, imprintsym, syms, symcolors):
-    """Creates an image array of the color table.
+    """Creates an image of the color table.
     - ncolors - int, number of colors in the pattern.
     - dpc - int, (px) dots per cell.
     - colors - array of ints, list colors of shape [ncolors, 3].
@@ -85,7 +163,7 @@ def get_table(ncolors, dpc, colors, counts, c, imprintsym, syms, symcolors):
         symbols in the same order as 'colors'.
     """
     fontsize = int(FONT2CELL*dpc*2)
-    fontpos, anchor, dpcd2 = (dpc*2-fontsize)//2, "lt", dpc//2
+    anchor, dpcd2 = "lm", dpc//2
     font = ImageFont.truetype(TTF, size=fontsize)
     dummyitem = "#fafad2 lightgoldenrodyellow (1000x)"  # longest assumed line
     linebbox = font.getbbox(dummyitem)
@@ -107,16 +185,16 @@ def get_table(ncolors, dpc, colors, counts, c, imprintsym, syms, symcolors):
                      box=(itemc*ci, itemr*ri, itemc*ci+dpc*2, itemr*ri+dpc*2))
             dim = ImageDraw.Draw(im)
             if imprintsym:
-                dim.text((itemc*ci+dpc, itemr*ri+fontpos), syms[coi],
-                         fill=tuple(symcolors[coi]), anchor="mt", font=font)
+                dim.text((itemc*ci+dpc, itemr*ri+dpc), syms[coi],
+                         fill=tuple(symcolors[coi]), anchor="mm", font=font)
             try:
                 fontname = webcolors.CSS3_NAMES_TO_HEX[tuple(colors[coi])]
             except KeyError:
                 fontname = "<no webname>"
-            dim.text((itemc*ci+dpc*2+dpcd2, itemr*ri+fontpos),
+            dim.text((itemc*ci+dpc*2+dpcd2, itemr*ri+dpc),
                      rgb2hex(colors[coi])+" "+fontname+f" ({counts[coi]}x)",
                      fill=(0, 0, 0), anchor=anchor, font=font)
-    im.show()
+    # im.show()
     return im
 
 
@@ -142,20 +220,6 @@ def get_syms(ncolors, imprintsym, colors):
     return syms, symcolors
 
 
-def get_canvas(dpc, r, c, pad, tgrid1, tgrid10, tablerpx):
-    """Creates empty canvas of size [canvasr, canvasc, 3].
-    All inputs are ints.
-    - dpc - (px) dots per cell.
-    - r/c - (1) rows/columns of grid.
-    - pad - (cells) padding in multiples of dpc.
-    - tgrid1/tgrid10 - (px) 1x1/10x10 grid thickness.
-    - tablerpx - (px) table vertical size.
-    """
-    canvasc = 2*pad*dpc+c*(dpc+tgrid1)+np.ceil(c/10)*(tgrid10-tgrid1)
-    canvasr = 2*pad*dpc+r*(dpc+tgrid1)+np.ceil(r/10)*(tgrid10-tgrid1)+tabler
-    return np.zeros((canvasr, canvasc, 3), dtype=np.uint8)
-
-
 def sort_colors(pattern, colors, counts):
     """Sorts the colors and updates accordingly the pattern and counts."""
     key = np.flip(np.argsort(counts))  # sort highest to lowest occurence
@@ -166,7 +230,8 @@ def sort_colors(pattern, colors, counts):
     return pattern0, colors0, counts0
 
 
-def from_raw_src(src, pxpcell, ncolors, kernel, filter_grid):
+def from_raw_src(src, pxpcell, ncolors, kernel, filter_grid, save_just_pattern,
+                 savesrc):
     """Reads and processes the input image (characterizes colours and
     makes a color array representation of the pattern).
     - src - string, path to the source image.
@@ -174,6 +239,9 @@ def from_raw_src(src, pxpcell, ncolors, kernel, filter_grid):
     - ncolors - int, (>=0) number of colours to characterize, 0 means
         automatic recognition.
     - kernel - string, {".", "+"} shape to extract colour from.
+    - filter_grid - bool, apply FFT filter to suppress grid?
+    - save_just_pattern - bool, save pattern as image with 1:1 scale?
+    - savesrc - string, path to the saved image (without extension).
 
     Returns:
     - pattern - 2darray of ints, representation of the pattern,
@@ -186,8 +254,7 @@ def from_raw_src(src, pxpcell, ncolors, kernel, filter_grid):
     im = np.asarray(Image.open(src))  # read image and make [r, c, RGB] array
     # <the RGB is a vector of size 3 of ints (0-255))>
     assert im.shape[2] == 3  # check if alpha is not present
-    assert ncolors > 0, "Automatic ncolor recognition not yet implemented!"
-    if filter_grid:
+    if filter_grid and pxpcell > 1:
         im = do_filter_grid(im, pxpcell)
         # im3 = Image.fromarray(im, mode="RGB")
         # im3.save("test3.png", "PNG")
@@ -207,12 +274,14 @@ def from_raw_src(src, pxpcell, ncolors, kernel, filter_grid):
     # im1.save("test1.png", "PNG")
     
     clrs, inds = get_colors(colors, ncolors)
-    # pattern = clrs[inds]
+    if ncolors == 0:
+        ncolors = len(clrs)
     cts = [np.sum(inds == i) for i in range(ncolors)]
-    
-    # im2 = Image.fromarray(pattern, mode="RGB")
-    # im2.show()
-    # im2.save("test2.png", "PNG")
+    # print(clrs, inds, cts, sep="\n")
+
+    if save_just_pattern:
+        im2 = Image.fromarray(clrs[inds], mode="RGB")
+        im2.save(savesrc+"_pattern.png")
     return inds, clrs, np.array(cts), r, c
 
 
@@ -258,15 +327,21 @@ def get_colors(image, ncolors):
     """Determine most common colors in an image (array) using k-means
     clustering (from scikit learn module).
     - image - array of shape [r, c, 3], RGB image array.
-    - ncolors - int, number of most common colors to find.
+    - ncolors - int, number of most common colors to find. Can be 0,
+        then all colours are used.
     Returns:
     - colors - array of shape [ncolors, 3], found colors.
     - labels - array of shape [r, c], indices of 'colors'.
     """
-    clt = KMeans(n_clusters=ncolors, random_state=RANDOM_STATE)
-    imshape = image.shape[:-1]
-    clt.fit(image.reshape(-1, 3))
-    return clt.cluster_centers_.astype("uint8"), clt.labels_.reshape(imshape)
+    shape = image.shape[:-1]  # original shape of the image
+    if  ncolors == 0:
+        colors, labels = np.unique(image.reshape(-1, 3), axis=0,
+                                   return_inverse=True)
+        return colors, labels.reshape(shape)
+    else:
+        clt = KMeans(n_clusters=ncolors, random_state=RANDOM_STATE)
+        clt.fit(image.reshape(-1, 3))
+        return clt.cluster_centers_.astype("uint8"), clt.labels_.reshape(shape)
 
 
 def get_kernel(kernel_type, cellsize):
@@ -276,7 +351,7 @@ def get_kernel(kernel_type, cellsize):
     - cellsize - int, size of a cell in px.
     """
     if cellsize == 1:
-        return [[0]]
+        return [[0, 0]]
     if cellsize == 2:
         return [[0, 0], [0, 1], [1, 0], [1, 1]]
     assert kernel_type in FILL.keys(), f"Wrong kernel type: {kernel_type}"
