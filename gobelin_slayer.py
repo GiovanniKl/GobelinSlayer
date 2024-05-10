@@ -25,6 +25,9 @@ FONT2CELL = 0.7  # filling factor of fontsize in a cell (default: 0.6)
 #   that suits you and put the link/path to it here)
 TTF = "consolas.ttf"
 SYMS = "abcdefghijklmnopqrstuvwxyz0123456789-+/*@#!:.ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+# reference names for small/large patterns
+SHORT = "created in GobelinSlayer"
+LONG = "see github.com/GiovanniKl/GobelinSlayer"
 
 
 def main():
@@ -35,17 +38,17 @@ def main():
     folder = (r"C:\Users\Jan\Documents\programování\3-1415926535897932384626"
               + r"433832791thon\gobelinSlayer")
     # name of the (future) saved file (without extension)
-    save = "horska_krajinka0"+f"_seed{RANDOM_STATE}"
+    save = "kocka0"+f"_seed{RANDOM_STATE}"
     # image file to read the pattern from (located within 'folder')
-    read = "Mountainside Lilies_pxpcell1140d198_n25.jpg"
-    # read = "sykorky-test0_pattern_edited.png"
+    read = "IMG-20240429-WA0003_pxpcell443d120_n25.jpg"
+    read = "kocka0_seed22863_pattern.png"
     # float, (px/cell) amount of pixels per one cell/stitch in the source
     #   (accepts floats, since some images can have non-integer cells/side,
     #   but the input image must have the same pxpcell in both directions)
-    pxpcell = 1140/198
-    # pxpcell = 1  # for reading from a 1:1 pattern
+    pxpcell = 443/120
+    pxpcell = 1  # for reading from a 1:1 pattern
     # int, number of colors in the image (nocolors >= 0; 0 means all)
-    ncolors = 25
+    ncolors = 0
     # bool, save just pattern? (dpc=1) (can be used for manual editing of
     #   generated pattern before making the final image on a grid, or
     #   for making previews, since its quite fast)
@@ -202,11 +205,14 @@ def get_table(ncolors, dpc, colors, counts, c, r, imprintsym, syms, symcolors):
             dim.text((itemc*ci+dpc*2+dpcd2, itemr*ri+dpc+titler),
                      rgb2hex(colors[coi])+" "+fontname+f" ({counts[coi]}x)",
                      fill=(0, 0, 0), anchor=anchor, font=font)
-    dim.text((dpc, dpc), f"{c}x{r}, {ncolors} colors:", fill=(0, 0, 0),
-             anchor="lm", font=font)
-    dim.text((table.shape[1]-dpc, dpc), "(created in GobelinSlayer, see "
-             +"github.com/GiovanniKl/GobelinSlayer)", fill=(0, 0, 0),
-             anchor="rm", font=font)
+    title = f"{c}x{r}, {ncolors} colors:"
+    dim.text((dpc, dpc), title, fill=(0, 0, 0), anchor="lm", font=font)
+    if font.getlength(SHORT+LONG+title+"_"*5) < table.shape[1]:
+        thanks = f"({SHORT}, {LONG})"
+    else:
+        thanks = f"({SHORT})"
+    dim.text((table.shape[1]-dpc, dpc), thanks, fill=(0, 0, 0), anchor="rm",
+             font=font)
     # im.show()
     return im
 
@@ -226,7 +232,7 @@ def get_syms(ncolors, imprintsym, colors):
     syms = SYMS[:ncolors]
     symcolors = np.zeros((ncolors, 3), dtype=np.uint8)
     for i in range(len(syms)):
-        if rgb2hsv(colors[i]/255)[2] < 0.5:
+        if rgb2hsv(colors[i]/255)[2] < 0.55:
             symcolors[i] = [255, 255, 255]
         else:
             symcolors[i] = [0, 0, 0]
