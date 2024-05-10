@@ -80,8 +80,8 @@ def main():
         return  # skips all following code
     pattern, colors, counts = sort_colors(pattern, colors, counts)
     syms, symcolors = get_syms(ncolors, imprintsym, colors)
-    table = get_table(ncolors, dpc, colors, counts, max((c, minc)), imprintsym,
-                      syms, symcolors)
+    table = get_table(ncolors, dpc, colors, counts, max((c, minc)),
+                      max((r, minr)), imprintsym, syms, symcolors)
     image = get_image(dpc, r, c, minr, minc, pad, tgrid1, tgrid10, pattern,
                       colors, table, imprintsym, syms, symcolors, cbg, cgrid1,
                       cgrid10)
@@ -156,13 +156,13 @@ def get_image(dpc, r, c, minr, minc, pad, tgrid1, tgrid10, pattern, colors,
     return canvas
 
 
-def get_table(ncolors, dpc, colors, counts, c, imprintsym, syms, symcolors):
+def get_table(ncolors, dpc, colors, counts, c, r, imprintsym, syms, symcolors):
     """Creates an image of the color table.
     - ncolors - int, number of colors in the pattern.
     - dpc - int, (px) dots per cell.
     - colors - array of ints, list colors of shape [ncolors, 3].
     - counts - array of ints, list color occurences of shape [ncolors].
-    - c - int, (cells) number of columns in the pattern.
+    - c/r - int, (cells) number of columns/rows in the pattern.
     - imprintsym - bool, write help symbols to color cells?
     - syms - str, line of symbols in the same order as 'colors'.
     - symcolors - array of ints, list of colors for the imprinted
@@ -173,13 +173,14 @@ def get_table(ncolors, dpc, colors, counts, c, imprintsym, syms, symcolors):
     font = ImageFont.truetype(TTF, size=fontsize)
     dummyitem = "#fafad2 lightgoldenrodyellow (1000x)"  # longest assumed line
     linebbox = font.getbbox(dummyitem)
+    titler = dpc*3  # height of title cell (1 cell across whole table)
     itemc = (dpc*3+linebbox[2]+1+dpcd2)  # width of an item box
     itemr = dpc*3  # height of an item box
     # number of table columns that fit within pattern width
     #   (approximated, assumes all gridlines are 1 px wide)
     nc = c*(dpc+1)//itemc
     nr = int(np.ceil(ncolors/nc))  # corresponding number of rows
-    table = np.zeros((nr*itemr - dpc, nc*itemc, 3), dtype=np.uint8)-1
+    table = np.zeros((nr*itemr - dpc + titler, nc*itemc, 3), dtype=np.uint8)-1
     im = Image.fromarray(table, mode="RGB")
 
     for ri in range(nr):
@@ -188,18 +189,24 @@ def get_table(ncolors, dpc, colors, counts, c, imprintsym, syms, symcolors):
             if coi >= ncolors:
                 continue  # all colors displayed already
             im.paste(tuple(colors[coi]),
-                     box=(itemc*ci, itemr*ri, itemc*ci+dpc*2, itemr*ri+dpc*2))
+                     box=(itemc*ci, itemr*ri+titler,
+                          itemc*ci+dpc*2, itemr*ri+dpc*2+titler))
             dim = ImageDraw.Draw(im)
             if imprintsym:
-                dim.text((itemc*ci+dpc, itemr*ri+dpc), syms[coi],
+                dim.text((itemc*ci+dpc, itemr*ri+titler+dpc), syms[coi],
                          fill=tuple(symcolors[coi]), anchor="mm", font=font)
             try:
                 fontname = webcolors.CSS3_NAMES_TO_HEX[tuple(colors[coi])]
             except KeyError:
                 fontname = "<no webname>"
-            dim.text((itemc*ci+dpc*2+dpcd2, itemr*ri+dpc),
+            dim.text((itemc*ci+dpc*2+dpcd2, itemr*ri+dpc+titler),
                      rgb2hex(colors[coi])+" "+fontname+f" ({counts[coi]}x)",
                      fill=(0, 0, 0), anchor=anchor, font=font)
+    dim.text((dpc, dpc), f"{c}x{r}, {ncolors} colors:", fill=(0, 0, 0),
+             anchor="lm", font=font)
+    dim.text((table.shape[1]-dpc, dpc), "(created in GobelinSlayer, see "
+             +"github.com/GiovanniKl/GobelinSlayer)", fill=(0, 0, 0),
+             anchor="rm", font=font)
     # im.show()
     return im
 
