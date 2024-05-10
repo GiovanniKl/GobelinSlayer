@@ -38,14 +38,14 @@ def main():
     folder = (r"C:\Users\Jan\Documents\programování\3-1415926535897932384626"
               + r"433832791thon\gobelinSlayer")
     # name of the (future) saved file (without extension)
-    save = "kocka0"+f"_seed{RANDOM_STATE}"
+    save = "fialky0ed"+f"_seed{RANDOM_STATE}"
     # image file to read the pattern from (located within 'folder')
-    read = "IMG-20240429-WA0003_pxpcell443d120_n25.jpg"
-    read = "kocka0_seed22863_pattern.png"
+    read = "fialky1_cut+rot_pxpcell500d84_n.jpg"
+    read = "fialky0_seed22863_pattern_refined.png"
     # float, (px/cell) amount of pixels per one cell/stitch in the source
     #   (accepts floats, since some images can have non-integer cells/side,
     #   but the input image must have the same pxpcell in both directions)
-    pxpcell = 443/120
+    pxpcell = 500/84
     pxpcell = 1  # for reading from a 1:1 pattern
     # int, number of colors in the image (nocolors >= 0; 0 means all)
     ncolors = 0
@@ -199,7 +199,7 @@ def get_table(ncolors, dpc, colors, counts, c, r, imprintsym, syms, symcolors):
                 dim.text((itemc*ci+dpc, itemr*ri+titler+dpc), syms[coi],
                          fill=tuple(symcolors[coi]), anchor="mm", font=font)
             try:
-                fontname = webcolors.CSS3_NAMES_TO_HEX[tuple(colors[coi])]
+                fontname = webcolors.CSS3_HEX_TO_NAMES[rgb2hex(colors[coi])]
             except KeyError:
                 fontname = "<no webname>"
             dim.text((itemc*ci+dpc*2+dpcd2, itemr*ri+dpc+titler),
