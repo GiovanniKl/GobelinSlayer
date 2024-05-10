@@ -35,17 +35,17 @@ def main():
     folder = (r"C:\Users\Jan\Documents\programování\3-1415926535897932384626"
               + r"433832791thon\gobelinSlayer")
     # name of the (future) saved file (without extension)
-    save = "kolibrici0"
+    save = "horska_krajinka0"+f"_seed{RANDOM_STATE}"
     # image file to read the pattern from (located within 'folder')
-    read = "IMG-20240429-WA0001_resized_to_pxpcell630d80.jpg"
+    read = "Mountainside Lilies_pxpcell1140d198_n25.jpg"
     # read = "sykorky-test0_pattern_edited.png"
     # float, (px/cell) amount of pixels per one cell/stitch in the source
     #   (accepts floats, since some images can have non-integer cells/side,
     #   but the input image must have the same pxpcell in both directions)
-    pxpcell = 630/80
+    pxpcell = 1140/198
     # pxpcell = 1  # for reading from a 1:1 pattern
     # int, number of colors in the image (nocolors >= 0; 0 means all)
-    ncolors = 21
+    ncolors = 25
     # bool, save just pattern? (dpc=1) (can be used for manual editing of
     #   generated pattern before making the final image on a grid, or
     #   for making previews, since its quite fast)
@@ -130,10 +130,10 @@ def get_image(dpc, r, c, minr, minc, pad, tgrid1, tgrid10, pattern, colors,
     font = ImageFont.truetype(TTF, size=fontsize)
     for ri in range(r0):
         for ci in range(c0):
-            rl = tgrid10 if (ri+1) % 10 == 0 else tgrid1
-            cl = tgrid10 if (ci+1) % 10 == 0 else tgrid1
-            cgridr = cgrid10 if (ri+1) % 10 == 0 else cgrid1
-            cgridc = cgrid10 if (ci+1) % 10 == 0 else cgrid1
+            rl = tgrid10 if ((ri+1) % 10 == 0 or ri == r0-1) else tgrid1
+            cl = tgrid10 if ((ci+1) % 10 == 0 or ci == c0-1) else tgrid1
+            cgridr = cgrid10 if ((ri+1) % 10 == 0 or ri == r0-1) else cgrid1
+            cgridc = cgrid10 if ((ci+1) % 10 == 0 or ci == c0-1) else cgrid1
             arf, acf = ari + dpc, aci + dpc
             if ri < r and ci < c:
                 canvas.paste(tuple(colors[pattern[ri, ci]]),
@@ -143,7 +143,7 @@ def get_image(dpc, r, c, minr, minc, pad, tgrid1, tgrid10, pattern, colors,
                     dim.text((aci+dpcd2, ari+dpcd2), syms[pattern[ri, ci]],
                              fill=tuple(symcolors[pattern[ri, ci]]),
                              anchor=anchor, font=font)
-            if (ci+1) % 10 == 0:
+            if (ci+1) % 10 == 0 or ci == c0-1:
                 canvas.paste(cgridr, (aci, arf, acf+cl, arf+rl))
                 canvas.paste(cgridc, (acf, ari, acf+cl, arf+rl))
             else:
@@ -219,7 +219,7 @@ def get_syms(ncolors, imprintsym, colors):
     syms = SYMS[:ncolors]
     symcolors = np.zeros((ncolors, 3), dtype=np.uint8)
     for i in range(len(syms)):
-        if rgb2hsv(colors[i])[2] > 0.5:
+        if rgb2hsv(colors[i]/255)[2] < 0.5:
             symcolors[i] = [255, 255, 255]
         else:
             symcolors[i] = [0, 0, 0]
