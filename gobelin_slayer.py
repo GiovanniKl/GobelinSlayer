@@ -38,14 +38,14 @@ def main():
     folder = (r"C:\Users\Jan\Documents\programování\3-1415926535897932384626"
               + r"433832791thon\gobelinSlayer")
     # name of the (future) saved file (without extension)
-    save = "fialky0ed"+f"_seed{RANDOM_STATE}"
+    save = "kvetinovaKrajina0ed"+f"_seed{RANDOM_STATE}"
     # image file to read the pattern from (located within 'folder')
-    read = "fialky1_cut+rot_pxpcell500d84_n.jpg"
-    read = "fialky0_seed22863_pattern_refined.png"
+    read = "kvetinovaKrajina0_original_cut_pxpcell1163d196.webp"
+    read = "kvetinovaKrajina0_seed22863_pattern_refined.png"
     # float, (px/cell) amount of pixels per one cell/stitch in the source
     #   (accepts floats, since some images can have non-integer cells/side,
     #   but the input image must have the same pxpcell in both directions)
-    pxpcell = 500/84
+    pxpcell = 1163/196
     pxpcell = 1  # for reading from a 1:1 pattern
     # int, number of colors in the image (nocolors >= 0; 0 means all)
     ncolors = 0
@@ -68,7 +68,7 @@ def main():
     cbg = "#ffffff"  # hex color, background color
     pad = 2  # int, (multiple of cellsize) space around grid and table
     kernel = "."  # string, {".", "+"} defines shape to extract color from
-    filter_grid = True  # bool, filter out grid remnants? (only for pxpcell > 1)
+    filter_grid = False  # bool, filter out grid remnants? (only for pxpcell > 1)
     #   (this may or may not work, sometimes changing random seed helps)
 
     # ##### DO NOT EDIT ANYTHING FURTHER DOWN (ONLY FIXES ALLOWED) #####
@@ -275,8 +275,8 @@ def from_raw_src(src, pxpcell, ncolors, kernel, filter_grid, save_just_pattern,
     assert im.shape[2] == 3  # check if alpha is not present
     if filter_grid and pxpcell > 1:
         im = do_filter_grid(im, pxpcell)
-        # im3 = Image.fromarray(im, mode="RGB")
-        # im3.save("test3.png", "PNG")
+        im3 = Image.fromarray(im, mode="RGB")
+        im3.save("test3_fft_filtered.png", "PNG")
     
     r, c = int(im.shape[0]/pxpcell), int(im.shape[1]/pxpcell)
     kern = get_kernel(kernel, int(round(pxpcell)))
@@ -313,6 +313,7 @@ def do_filter_grid(im, pxpcell):
     mask = get_mask(imsh[0], imsh[1], circs, FFT["radius"])
     hsv = rgb2hsv(im/255)
     val = hsv[..., 2]  # extract Value channel (grid is black)
+    FFT["repval"] = np.median(val)
 
     valfft = np.fft.fftshift(np.fft.fft2(val))*mask
     valfft[mask==0] = FFT["repval"]
