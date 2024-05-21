@@ -3,13 +3,14 @@ gobelins/tapisseries from (low-quality) internet images or your own
 designs made, e.g., in Windows Paint.
 
 Created by Jan Klíma on 2024/04/30.
-Updated on 2024/05/10.
+Updated on 2024/05/22.
 """
 
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import webcolors  # for conversion of names and hex codes (CSS3)
 from sklearn.cluster import KMeans  # for color finding
+from skimage.color import rgb2lab, deltaE_ciede2000  # for coversion to CIELAB
 
 # ### adjustable constants (advanced usage)
 # kernel filling factor in units of cellsize, default: {".": 0.45, "+": 0.8}
@@ -28,6 +29,8 @@ SYMS = "abcdefghijklmnopqrstuvwxyz0123456789-+/*@#!:.ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # reference names for small/large patterns
 SHORT = "created in GobelinSlayer"
 LONG = "see github.com/GiovanniKl/GobelinSlayer"
+# round all colors to some webcolor? (see metrics below as COLOR_METRIC)
+FORCE_WEBCOLORS = True  
 
 
 def main():
@@ -38,27 +41,31 @@ def main():
     folder = (r"C:\Users\Jan\Documents\programování\3-1415926535897932384626"
               + r"433832791thon\gobelinSlayer")
     # name of the (future) saved file (without extension)
-    save = "kvetinovaKrajina0ed"+f"_seed{RANDOM_STATE}"
+    save = "zvonky0_0_wcs"+f"_seed{RANDOM_STATE}"
     # image file to read the pattern from (located within 'folder')
-    read = "kvetinovaKrajina0_original_cut_pxpcell1163d196.webp"
-    read = "kvetinovaKrajina0_seed22863_pattern_refined.png"
+    read = "zvonky0_original_cut_pxpcell1366d109_n4.jpg"
     # float, (px/cell) amount of pixels per one cell/stitch in the source
     #   (accepts floats, since some images can have non-integer cells/side,
     #   but the input image must have the same pxpcell in both directions)
-    pxpcell = 1163/196
-    pxpcell = 1  # for reading from a 1:1 pattern
+    pxpcell = 1366/109
     # int, number of colors in the image (nocolors >= 0; 0 means all)
-    ncolors = 0
+    ncolors = 4
     # bool, save just pattern? (dpc=1) (can be used for manual editing of
     #   generated pattern before making the final image on a grid, or
     #   for making previews, since its quite fast)
-    save_just_pattern = False
+    save_just_pattern = True
     # int, minimum number of grid points for rows/columns for the final grid
     minr, minc = 20, 20
     # int, dots per cell/grid point (affects final resolution)
     dpc = 10
     # bool, print symbols to cells? (for better clarity between colors)
     imprintsym = True
+    # '''  # ### quick settings for reading from pattern ###
+    read = "zvonky0_0_seed22863_pattern.png"
+    pxpcell = 1  # for reading from a 1:1 pattern
+    save_just_pattern = False
+    ncolors = 0
+    # '''
     
     # ### advanced options ###
     # int, grid line thickness for 1x1 cell and 10x10 cell
@@ -81,6 +88,7 @@ def main():
     if save_just_pattern:
         print("Pattern image saved successfully (only the 1:1 scale pattern).")
         return  # skips all following code
+    colors = get_right_colors(colors, ncolors)
     pattern, colors, counts = sort_colors(pattern, colors, counts)
     syms, symcolors = get_syms(ncolors, imprintsym, colors)
     table = get_table(ncolors, dpc, colors, counts, max((c, minc)),
@@ -182,6 +190,7 @@ def get_table(ncolors, dpc, colors, counts, c, r, imprintsym, syms, symcolors):
     # number of table columns that fit within pattern width
     #   (approximated, assumes all gridlines are 1 px wide)
     nc = c*(dpc+1)//itemc
+    assert nc > 0, "Increase 'minc' parameter, table rows cannot be printed."
     nr = int(np.ceil(ncolors/nc))  # corresponding number of rows
     table = np.zeros((nr*itemr - dpc + titler, nc*itemc, 3), dtype=np.uint8)-1
     im = Image.fromarray(table, mode="RGB")
@@ -249,6 +258,77 @@ def sort_colors(pattern, colors, counts):
     return pattern0, colors0, counts0
 
 
+def get_right_colors(colors, ncolors):
+    """Check function for deciding the colors to actually use,
+    e.g. if rounding to nearest webcolors is used.
+    - colors - list of 3-tuples of ints, list of colours, ordered by
+        appearance in the source image.
+    - ncolors - int, number of colors in the pattern.
+    """
+    if not FORCE_WEBCOLORS:
+        return colors
+    wcs = list(webcolors.CSS3_HEX_TO_NAMES.keys())
+    print(f"Choosing colors {len(wcs)} from webcolors!")
+    scores = np.zeros(len(wcs))
+    for ci in range(ncolors):
+        for wci, wce in enumerate(wcs):
+            scores[wci] = COLOR_METRIC(colors[ci], hex2rgb(wce))
+        order = np.argsort(scores)  # sort from best (lowest) score
+        do, selected_i = True, 0
+        while do:
+            if hex2rgb(wcs[order[selected_i]]) in colors:
+                selected_i += 1
+                continue
+            colors[ci] = hex2rgb(wcs[order[selected_i]])
+            do = False
+    return colors
+
+
+# ### beginning of section with color metric functions
+# Metric functions must take as args two 3-tuples with values within [0 255].
+
+
+def score_by_ciede2000(rgb0, rgb1):
+    """Metric used for rounding colors to nearest webcolor.
+    Based on the CIEDE2000 metric, see
+    https://en.wikipedia.org/wiki/Color_difference.
+    - rgb0/rgb1 - 3-tuple of int, valid RGB tuples.
+    """
+    return deltaE_ciede2000(rgb2lab(np.array(rgb0)/255),
+                            rgb2lab(np.array(rgb1)/255))
+
+
+def score_by_weighted_srgb(rgb0, rgb1):
+    """Metric used for rounding colors to nearest webcolor.
+    Based on the weighted sRGB distance, see
+    https://en.wikipedia.org/wiki/Color_difference.
+    - rgb0/rgb1 - 3-tuple of int, valid RGB tuples.
+    """
+    rbar = (rgb0[0]+rgb1[0])/2
+    r, b = (2, 3) if rbar < 128 else (3, 2)
+    return np.sqrt(r*(rgb0[0]-rgb1[0])**2
+                   + 4*(rgb0[1]-rgb1[1])**2
+                   + b*(rgb0[2]-rgb1[2])**2)
+    
+
+def score_colors_my_hsv(rgb0, rgb1):
+    """Metric used for rounding colors to nearest webcolor.
+    Awards lowest score to closest colors, based on HSV colorspace.
+    - rgb0/rgb1 - 3-tuple of int, valid RGB tuples.
+    """
+    hsv0 = rgb2hsv(np.array(rgb0)/255)
+    hsv1 = rgb2hsv(np.array(rgb1)/255)
+    # hue most important (maybe change multiplier)
+    score = np.abs(hsv0[0]-hsv1[0])*2
+    # saturation and value have same weight and euclidean metric used
+    score += np.sqrt((hsv0[1]-hsv1[1])**2 + (hsv0[2]-hsv1[2])**2)
+    return score
+
+
+# ### end of color metric functions
+COLOR_METRIC = score_by_ciede2000  # the used color metric function
+    
+
 def from_raw_src(src, pxpcell, ncolors, kernel, filter_grid, save_just_pattern,
                  savesrc):
     """Reads and processes the input image (characterizes colours and
@@ -265,8 +345,8 @@ def from_raw_src(src, pxpcell, ncolors, kernel, filter_grid, save_just_pattern,
     Returns:
     - pattern - 2darray of ints, representation of the pattern,
         each int value represents a color from 'colors'.
-    - clrs - list of strings, list of colours, ordered by appearance
-        in the source image.
+    - clrs - list of 3-tuples of ints, list of colours, ordered by
+        appearance in the source image.
     - cts - list of ints, list of occurences (same size and order as 'clrs').
     - r, c - ints, number of rows and columns in the pattern.
     """
@@ -371,8 +451,10 @@ def get_kernel(kernel_type, cellsize):
     - cellsize - int, size of a cell in px.
     """
     if cellsize == 1:
+        print("Reading from 1:1 pattern.")
         return [[0, 0]]
     if cellsize == 2:
+        print("This is your kernel:", np.ones((2, 2)), sep="\n")
         return [[0, 0], [0, 1], [1, 0], [1, 1]]
     assert kernel_type in FILL.keys(), f"Wrong kernel type: {kernel_type}"
     n = cellsize  # just a shortcut
@@ -392,15 +474,17 @@ def get_kernel(kernel_type, cellsize):
     print("This is your kernel:", ker0, sep="\n")
     # return np.array(ker, dtype=int)
     return ker
-    
+
 
 def clamp(x, *args):
     """Used for validation of rgb tuple elements to be between 0 and 255."""
     return max(0, min(x, 255))
 
+
 def rgb2hex(rgbtup, *args):
     """Converts rgb tuple to a hex string."""
     return "#{:02x}{:02x}{:02x}".format(*[clamp(i) for i in rgbtup])
+
 
 def hex2rgb(hexstr, *args):
     """Converts hex string to RGB tuple."""
