@@ -3,7 +3,7 @@ gobelins/tapisseries from (low-quality) internet images or your own
 designs made, e.g., in Windows Paint.
 
 Created by Jan Klíma on 2024/04/30.
-Updated on 2024/05/22.
+Updated on 2024/05/23.
 """
 
 import numpy as np
@@ -24,13 +24,16 @@ FONT2CELL = 0.7  # filling factor of fontsize in a cell (default: 0.6)
 # path to used font TTF file (monospaced preferred, default: "consolas.ttf")
 #   (the font is not supplied by this package, you have to find a font file
 #   that suits you and put the link/path to it here)
-TTF = "consolas.ttf"
+TTF = "consolas.ttf"  # consolas, RobotoMono, segoeui
+ANTIALIASING = "L"  # PIL ImageDraw fontmode, "1"/"L" - aa disabled/enabled
 SYMS = "abcdefghijklmnopqrstuvwxyz0123456789-+/*@#!:.ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # reference names for small/large patterns
 SHORT = "created in GobelinSlayer"
 LONG = "see github.com/GiovanniKl/GobelinSlayer"
 # round all colors to some webcolor? (see metrics below as COLOR_METRIC)
-FORCE_WEBCOLORS = True  
+FORCE_WEBCOLORS = True
+# if FORCE_WEBCOLORS: ensure different colors? (joins too similar otherwise)
+FORCE_PRESERVE_NCOLORS = False
 
 
 def main():
@@ -41,15 +44,15 @@ def main():
     folder = (r"C:\Users\Jan\Documents\programování\3-1415926535897932384626"
               + r"433832791thon\gobelinSlayer")
     # name of the (future) saved file (without extension)
-    save = "zvonky0_0_wcs"+f"_seed{RANDOM_STATE}"
+    save = "SpringFlowers0_0_wcs_nonred"+f"_seed{RANDOM_STATE}"
     # image file to read the pattern from (located within 'folder')
-    read = "zvonky0_original_cut_pxpcell1366d109_n4.jpg"
+    read = "SpringFlowers0_pxpcell736d78.jpg"
     # float, (px/cell) amount of pixels per one cell/stitch in the source
     #   (accepts floats, since some images can have non-integer cells/side,
     #   but the input image must have the same pxpcell in both directions)
-    pxpcell = 1366/109
+    pxpcell = 736/78
     # int, number of colors in the image (nocolors >= 0; 0 means all)
-    ncolors = 4
+    ncolors = 20
     # bool, save just pattern? (dpc=1) (can be used for manual editing of
     #   generated pattern before making the final image on a grid, or
     #   for making previews, since its quite fast)
@@ -61,7 +64,7 @@ def main():
     # bool, print symbols to cells? (for better clarity between colors)
     imprintsym = True
     # '''  # ### quick settings for reading from pattern ###
-    read = "zvonky0_0_seed22863_pattern.png"
+    read = "SpringFlowers0_0_seed22863_pattern.png"
     pxpcell = 1  # for reading from a 1:1 pattern
     save_just_pattern = False
     ncolors = 0
@@ -89,7 +92,8 @@ def main():
         print("Pattern image saved successfully (only the 1:1 scale pattern).")
         return  # skips all following code
     colors = get_right_colors(colors, ncolors)
-    pattern, colors, counts = sort_colors(pattern, colors, counts)
+    pattern, colors, ncolors, counts = sort_colors(pattern, colors, ncolors,
+                                                   counts)
     syms, symcolors = get_syms(ncolors, imprintsym, colors)
     table = get_table(ncolors, dpc, colors, counts, max((c, minc)),
                       max((r, minr)), imprintsym, syms, symcolors)
@@ -151,6 +155,7 @@ def get_image(dpc, r, c, minr, minc, pad, tgrid1, tgrid10, pattern, colors,
                              (aci, ari, acf, arf))
                 if imprintsym:
                     dim = ImageDraw.Draw(canvas)
+                    dim.fontmode = ANTIALIASING
                     dim.text((aci+dpcd2, ari+dpcd2), syms[pattern[ri, ci]],
                              fill=tuple(symcolors[pattern[ri, ci]]),
                              anchor=anchor, font=font)
@@ -204,6 +209,7 @@ def get_table(ncolors, dpc, colors, counts, c, r, imprintsym, syms, symcolors):
                      box=(itemc*ci, itemr*ri+titler,
                           itemc*ci+dpc*2, itemr*ri+dpc*2+titler))
             dim = ImageDraw.Draw(im)
+            dim.fontmode = ANTIALIASING
             if imprintsym:
                 dim.text((itemc*ci+dpc, itemr*ri+titler+dpc), syms[coi],
                          fill=tuple(symcolors[coi]), anchor="mm", font=font)
@@ -248,14 +254,25 @@ def get_syms(ncolors, imprintsym, colors):
     return syms, symcolors
 
 
-def sort_colors(pattern, colors, counts):
-    """Sorts the colors and updates accordingly the pattern and counts."""
+def sort_colors(pattern, colors, ncolors, counts):
+    """Sorts the colors and updates accordingly the pattern and counts.
+    Also removes doubles in colors (e.g. from the rounding process).
+    """
+    uniq, invs = np.unique(colors, return_inverse=True, axis=0)
+    if uniq.shape[0] < ncolors:  # reduce same colors
+        print(f"Reducing same colors ({ncolors} -> {uniq.shape[0]} colors).")
+        unicts = np.zeros(uniq.shape[0], dtype=int)
+        unipat = np.zeros(pattern.shape, dtype=int)
+        for ci in range(ncolors):
+            unicts[invs[ci]] += counts[ci]
+            unipat[pattern == ci] = invs[ci]
+        pattern, colors, ncolors, counts = unipat, uniq, uniq.shape[0], unicts
     key = np.flip(np.argsort(counts))  # sort highest to lowest occurence
     colors0, counts0 = colors[key], counts[key]
     pattern0 = pattern.copy()
-    for i in range(len(counts)):
+    for i in range(ncolors):
         pattern0[pattern == i] = np.nonzero(key == i)[0][0]
-    return pattern0, colors0, counts0
+    return pattern0, colors0, ncolors, counts0
 
 
 def get_right_colors(colors, ncolors):
@@ -274,12 +291,14 @@ def get_right_colors(colors, ncolors):
         for wci, wce in enumerate(wcs):
             scores[wci] = COLOR_METRIC(colors[ci], hex2rgb(wce))
         order = np.argsort(scores)  # sort from best (lowest) score
-        do, selected_i = True, 0
+        do, new_ci = True, 0
+        if np.all(colors[ci] == hex2rgb(wcs[order[0]])):
+            do = False  # color already one of wcs
         while do:
-            if hex2rgb(wcs[order[selected_i]]) in colors:
-                selected_i += 1
+            if hex2rgb(wcs[order[new_ci]]) in colors and FORCE_PRESERVE_NCOLORS:
+                new_ci += 1
                 continue
-            colors[ci] = hex2rgb(wcs[order[selected_i]])
+            colors[ci] = hex2rgb(wcs[order[new_ci]])
             do = False
     return colors
 
