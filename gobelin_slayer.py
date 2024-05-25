@@ -3,7 +3,7 @@ gobelins/tapisseries from (low-quality) internet images or your own
 designs made, e.g., in Windows Paint.
 
 Created by Jan Klíma on 2024/04/30.
-Updated on 2024/05/23.
+Updated on 2024/05/25.
 """
 
 import numpy as np
@@ -11,6 +11,8 @@ from PIL import Image, ImageDraw, ImageFont
 import webcolors  # for conversion of names and hex codes (CSS3)
 from sklearn.cluster import KMeans  # for color finding
 from skimage.color import rgb2lab, deltaE_ciede2000  # for coversion to CIELAB
+from pantone2310 import PANTONE2310  # 2310 of pantone color names and hex codes
+from time import perf_counter  # for program execution time measurements
 
 # ### adjustable constants (advanced usage)
 # kernel filling factor in units of cellsize, default: {".": 0.45, "+": 0.8}
@@ -30,10 +32,13 @@ SYMS = "abcdefghijklmnopqrstuvwxyz0123456789-+/*@#!:.ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # reference names for small/large patterns
 SHORT = "created in GobelinSlayer"
 LONG = "see github.com/GiovanniKl/GobelinSlayer"
-# round all colors to some webcolor? (see metrics below as COLOR_METRIC)
-FORCE_WEBCOLORS = True
-# if FORCE_WEBCOLORS: ensure different colors? (joins too similar otherwise)
-FORCE_PRESERVE_NCOLORS = False
+# round all colors to some color from NAMEDICT (metric further as COLOR_METRIC)
+FORCE_NAMED_COLORS = True
+# dictionary of hex codes:color names, uncomment the one desired to be used
+# NAMEDICT = webcolors.CSS3_HEX_TO_NAMES  # color names from CSS3 list
+NAMEDICT = PANTONE2310  # 2310 color names from Pantone FHI collection
+# if FORCE_NAMED_COLORS: ensure different colors? (joins too similar otherwise)
+FORCE_PRESERVE_NCOLORS = True
 
 
 def main():
@@ -44,7 +49,7 @@ def main():
     folder = (r"C:\Users\Jan\Documents\programování\3-1415926535897932384626"
               + r"433832791thon\gobelinSlayer")
     # name of the (future) saved file (without extension)
-    save = "SpringFlowers0_0_wcs_nonred"+f"_seed{RANDOM_STATE}"
+    save = "SpringFlowers0_0_pantone_"+f"_seed{RANDOM_STATE}"
     # image file to read the pattern from (located within 'folder')
     read = "SpringFlowers0_pxpcell736d78.jpg"
     # float, (px/cell) amount of pixels per one cell/stitch in the source
@@ -214,11 +219,11 @@ def get_table(ncolors, dpc, colors, counts, c, r, imprintsym, syms, symcolors):
                 dim.text((itemc*ci+dpc, itemr*ri+titler+dpc), syms[coi],
                          fill=tuple(symcolors[coi]), anchor="mm", font=font)
             try:
-                fontname = webcolors.CSS3_HEX_TO_NAMES[rgb2hex(colors[coi])]
+                colorname = NAMEDICT[rgb2hex(colors[coi])]
             except KeyError:
-                fontname = "<no webname>"
+                colorname = "<no color name>"
             dim.text((itemc*ci+dpc*2+dpcd2, itemr*ri+dpc+titler),
-                     rgb2hex(colors[coi])+" "+fontname+f" ({counts[coi]}x)",
+                     rgb2hex(colors[coi])+" "+colorname+f" ({counts[coi]}x)",
                      fill=(0, 0, 0), anchor=anchor, font=font)
     title = f"{c}x{r}, {ncolors} colors:"
     dim.text((dpc, dpc), title, fill=(0, 0, 0), anchor="lm", font=font)
@@ -282,10 +287,10 @@ def get_right_colors(colors, ncolors):
         appearance in the source image.
     - ncolors - int, number of colors in the pattern.
     """
-    if not FORCE_WEBCOLORS:
+    if not FORCE_NAMED_COLORS:
         return colors
-    wcs = list(webcolors.CSS3_HEX_TO_NAMES.keys())
-    print(f"Choosing colors {len(wcs)} from webcolors!")
+    wcs = list(NAMEDICT.keys())
+    print(f"Choosing colors from {len(wcs)} named colors!")
     scores = np.zeros(len(wcs))
     for ci in range(ncolors):
         for wci, wce in enumerate(wcs):
@@ -647,4 +652,7 @@ def hsv2rgb(hsv):
 
 
 if __name__ == "__main__":
+    start = perf_counter()
     main()
+    end = perf_counter()
+    print(f"Program finished within {end-start} s.")
