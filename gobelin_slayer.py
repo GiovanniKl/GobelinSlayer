@@ -33,13 +33,16 @@ SYMS = "abcdefghijklmnopqrstuvwxyz0123456789-+/*@#!:.ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 # reference names for small/large patterns
 SHORT = "created in GobelinSlayer"
 LONG = "see github.com/GiovanniKl/GobelinSlayer"
-# round all colors to some color from NAMEDICT (metric further as COLOR_METRIC)
+# round? all colors to some color from NAMEDICT (metric further as COLOR_METRIC)
 FORCE_NAMED_COLORS = True
 # dictionary of hex codes:color names, uncomment the one desired to be used
 # NAMEDICT = webcolors.CSS3_HEX_TO_NAMES  # color names from CSS3 list
 NAMEDICT = PANTONE2310  # 2310 color names from Pantone FHI collection
 # if FORCE_NAMED_COLORS: ensure different colors? (joins too similar otherwise)
 FORCE_PRESERVE_NCOLORS = True
+# create? an image containing only used colors as a small table (without names,
+#   optionally with symbols), i.e. the palette of used colors
+MAKE_PALETTE = True
 
 
 def main():
@@ -70,8 +73,8 @@ def main():
     # bool, print symbols to cells? (for better clarity between colors)
     imprintsym = True
     # '''  # ### quick settings for reading from pattern ###
-    read = "kvetiny2_pantone__n22_seed22863_pattern_revised.png"
-    save = (read[:read.find("_pattern")] + f"_dpc{dpc}_rev.png")
+    read = "kvetiny2_pantone__n21_seed22863_pattern_revised_n22.png"
+    save = (read[:read.find("_pattern")] + f"_dpc{dpc}_rev")
     pxpcell = 1  # for reading from a 1:1 pattern
     save_just_pattern = False
     ncolors = 0
@@ -102,6 +105,8 @@ def main():
     pattern, colors, ncolors, counts = sort_colors(pattern, colors, ncolors,
                                                    counts)
     syms, symcolors = get_syms(ncolors, imprintsym, colors)
+    make_palette(ncolors, dpc, colors, imprintsym, syms, symcolors, folder,
+                 save, cbg)
     table = get_table(ncolors, dpc, colors, counts, max((c, minc)),
                       max((r, minr)), imprintsym, syms, symcolors)
     image = get_image(dpc, r, c, minr, minc, pad, tgrid1, tgrid10, pattern,
@@ -191,6 +196,7 @@ def get_table(ncolors, dpc, colors, counts, c, r, imprintsym, syms, symcolors):
     - symcolors - array of ints, list of colors for the imprinted
         symbols in the same order as 'colors'.
     """
+    # ### fix to use the cbg parameter, font color might need to be added
     fontsize = int(FONT2CELL*dpc*2)
     anchor, dpcd2 = "lm", dpc//2
     font = ImageFont.truetype(TTF, size=fontsize)
@@ -237,6 +243,52 @@ def get_table(ncolors, dpc, colors, counts, c, r, imprintsym, syms, symcolors):
              font=font)
     # im.show()
     return im
+
+
+def make_palette(ncolors, dpc, colors, imprintsym, syms, symcolors, folder,
+                 save, cbg):
+    """Create and save a palette ~ a small overview of used colors.
+    This can be used e.g. to compare real threads with the pattern.
+    - ncolors - int, number of colors in the pattern.
+    - dpc - int, (px) dots per cell.
+    - colors - array of ints, list colors of shape [ncolors, 3].
+    - imprintsym - bool, write help symbols to color cells?
+    - syms - str, line of symbols in the same order as 'colors'.
+    - symcolors - array of ints, list of colors for the imprinted
+        symbols in the same order as 'colors'.
+    - cbg - hex string, background color.
+    """
+    if not MAKE_PALETTE:
+        return
+    dpc = dpc*4  # make the table more visible
+    fontsize = int(FONT2CELL*dpc)
+    font = ImageFont.truetype(TTF, size=fontsize)
+    anchor, dpcd2 = "mm", dpc//2
+    # make an order by the hue
+    hue_ord = np.argsort([rgb2hsv(i/255)[0] for i in colors])
+    # print(hue_ord)
+    nc = int(np.sqrt(ncolors))
+    nr = int(np.ceil(ncolors/nc))
+
+    imag = np.zeros(((nr+2)*dpc, (nc+2)*dpc, 3), dtype=np.uint8)
+    imag[:, :] = hex2rgb(cbg)
+    im = Image.fromarray(imag, mode="RGB")
+    for ri in range(nr):
+        for ci in range(nc):
+            coi = ri*nc + (nc-ci-1 if ri % 2 == 1 else ci)  # zig-zag
+            if coi >= ncolors:
+                continue  # skip empty when going right to left on last row
+            im.paste(tuple(colors[hue_ord[coi]]),
+                     box=((ci+1)*dpc, (ri+1)*dpc, (ci+2)*dpc, (ri+2)*dpc))
+            if imprintsym:
+                dim = ImageDraw.Draw(im)
+                dim.fontmode = ANTIALIASING
+                dim.text(((ci+1)*dpc+dpcd2, (ri+1)*dpc+dpcd2),
+                         syms[hue_ord[coi]],
+                         fill=tuple(symcolors[hue_ord[coi]]), anchor=anchor,
+                         font=font)
+    im.save(folder+"/"+save+"_palette.png")
+    im.close()  # release memory
 
 
 def get_syms(ncolors, imprintsym, colors):
