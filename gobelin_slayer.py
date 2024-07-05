@@ -3,7 +3,7 @@ gobelins/tapisseries from (low-quality) internet images or your own
 designs made, e.g., in Windows Paint.
 
 Created by Jan Klíma on 2024/04/30.
-Updated on 2024/05/25.
+Updated on 2024/07/05.
 """
 
 import numpy as np
@@ -17,10 +17,11 @@ from time import perf_counter  # for program execution time measurements
 # ### adjustable constants (advanced usage)
 # kernel filling factor in units of cellsize, default: {".": 0.45, "+": 0.8}
 #   (increase it if your kernel is too small)
-FILL = {".": 0.45, "+": 0.8}
+FILL = {".": 0.55, "+": 0.8}
 # FFT filter params: circle radius (default 5), replaced value (default 10.)
 FFT = {"radius": 5, "repval": 10.}
 # fixing random state of color-recognition, int or None (default: None)
+#   (affects only k-means search, not color choice from named list)
 RANDOM_STATE = 22863
 FONT2CELL = 0.7  # filling factor of fontsize in a cell (default: 0.6)
 # path to used font TTF file (monospaced preferred, default: "consolas.ttf")
@@ -48,28 +49,29 @@ def main():
     # place to read and save your designs
     folder = (r"C:\Users\Jan\Documents\programování\3-1415926535897932384626"
               + r"433832791thon\gobelinSlayer")
+    # int, number of colors in the image (nocolors >= 0; 0 means all)
+    ncolors = 22
+    # int, dots per cell/grid point (affects final resolution)
+    dpc = 20
     # name of the (future) saved file (without extension)
-    save = "SpringFlowers0_0_pantone_"+f"_seed{RANDOM_STATE}"
+    save = "kvetiny2_pantone_"+f"_n{ncolors}_seed{RANDOM_STATE}_dpc{dpc}"
     # image file to read the pattern from (located within 'folder')
-    read = "SpringFlowers0_pxpcell736d78.jpg"
+    read = "kvetiny2_cut_pxpcell535d123_resized.jpg"
     # float, (px/cell) amount of pixels per one cell/stitch in the source
     #   (accepts floats, since some images can have non-integer cells/side,
     #   but the input image must have the same pxpcell in both directions)
-    pxpcell = 736/78
-    # int, number of colors in the image (nocolors >= 0; 0 means all)
-    ncolors = 20
+    pxpcell = 535/123
     # bool, save just pattern? (dpc=1) (can be used for manual editing of
     #   generated pattern before making the final image on a grid, or
     #   for making previews, since its quite fast)
     save_just_pattern = True
     # int, minimum number of grid points for rows/columns for the final grid
     minr, minc = 20, 20
-    # int, dots per cell/grid point (affects final resolution)
-    dpc = 10
     # bool, print symbols to cells? (for better clarity between colors)
     imprintsym = True
     # '''  # ### quick settings for reading from pattern ###
-    read = "SpringFlowers0_0_seed22863_pattern.png"
+    read = "kvetiny2_pantone__n22_seed22863_pattern_revised.png"
+    save = (read[:read.find("_pattern")] + f"_dpc{dpc}_rev.png")
     pxpcell = 1  # for reading from a 1:1 pattern
     save_just_pattern = False
     ncolors = 0
@@ -404,7 +406,7 @@ def from_raw_src(src, pxpcell, ncolors, kernel, filter_grid, save_just_pattern,
 
     if save_just_pattern:
         im2 = Image.fromarray(clrs[inds], mode="RGB")
-        im2.save(savesrc+"_pattern.png")
+        im2.save(savesrc[:savesrc.find("_dpc")]+"_pattern.png")
     return inds, clrs, np.array(cts), r, c
 
 
@@ -414,6 +416,8 @@ def do_filter_grid(im, pxpcell):
                       [1, 1], [1, 0], [1, -1], [0, -1]], dtype=int)
     imsh = np.array(im.shape[:-1], dtype=int)
     circs = (imsh/2).astype(int) + poses*(imsh/pxpcell).astype(int)
+    # poses = np.concatenate((poses, poses*10))
+    # circs = (imsh/2).astype(int) + poses*(imsh/pxpcell/10).astype(int)
     mask = get_mask(imsh[0], imsh[1], circs, FFT["radius"])
     hsv = rgb2hsv(im/255)
     val = hsv[..., 2]  # extract Value channel (grid is black)
