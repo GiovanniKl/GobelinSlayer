@@ -1,5 +1,5 @@
 """Script for extracting/creating embroidery patterns for
-gobelins/tapisseries from (low-quality) internet images or your own
+gobelins/tapestries from (low-quality) internet images or your own
 designs made, e.g., in Windows Paint.
 
 Created by Jan Klíma on 2024/04/30.
@@ -10,7 +10,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import webcolors  # for conversion of names and hex codes (CSS3)
 from sklearn.cluster import KMeans  # for color finding
-from skimage.color import rgb2lab, deltaE_ciede2000  # for coversion to CIELAB
+from skimage.color import rgb2lab, deltaE_ciede2000  # for conversion to CIELAB
 from pantone2310 import PANTONE2310  # 2310 of pantone color names and hex codes
 from time import perf_counter  # for program execution time measurements
 
@@ -36,7 +36,8 @@ LONG = "see github.com/GiovanniKl/GobelinSlayer"
 # round? all colors to some color from NAMEDICT (metric further as COLOR_METRIC)
 FORCE_NAMED_COLORS = True
 # dictionary of hex codes:color names, uncomment the one desired to be used
-# NAMEDICT = webcolors.CSS3_HEX_TO_NAMES  # color names from CSS3 list
+# NAMEDICT = webcolors.CSS3_HEX_TO_NAMES  # names from CSS3 list (for <=v1.13)
+# NAMEDICT = webcolors._definitions._CSS3_HEX_TO_NAMES  # names from CSS3 list
 NAMEDICT = PANTONE2310  # 2310 color names from Pantone FHI collection
 # if FORCE_NAMED_COLORS: ensure different colors? (joins too similar otherwise)
 FORCE_PRESERVE_NCOLORS = True
@@ -79,7 +80,7 @@ def main():
     save_just_pattern = False
     ncolors = 0
     # '''
-    
+
     # ### advanced options ###
     # int, grid line thickness for 1x1 cell and 10x10 cell
     tgrid1, tgrid10 = max((1, dpc//10)), max((2, dpc//5))
@@ -149,7 +150,7 @@ def get_image(dpc, r, c, minr, minc, pad, tgrid1, tgrid10, pattern, colors,
            + int(np.ceil(c0/10))*(tgrid10-tgrid1)] = hex2rgb(cgrid10)
     canvas[pad*dpc:pad*dpc+r0*(dpc+tgrid1)+int(np.ceil(r0/10))*(tgrid10-tgrid1)
            + tgrid10, pad*dpc:pad*dpc+tgrid10] = hex2rgb(cgrid10)
-    
+
     canvas = Image.fromarray(canvas)
     ari, aci = pad*dpc+tgrid10, pad*dpc+tgrid10  # initial row/col index of cell
     fontsize = int(FONT2CELL*dpc)
@@ -233,7 +234,7 @@ def get_table(ncolors, dpc, colors, counts, c, r, imprintsym, syms, symcolors):
             dim.text((itemc*ci+dpc*2+dpcd2, itemr*ri+dpc+titler),
                      rgb2hex(colors[coi])+" "+colorname+f" ({counts[coi]}x)",
                      fill=(0, 0, 0), anchor=anchor, font=font)
-    title = f"{c}x{r}, {ncolors} colors:"
+    title = f"{c}×{r}, {ncolors} colors:"
     dim.text((dpc, dpc), title, fill=(0, 0, 0), anchor="lm", font=font)
     if font.getlength(SHORT+LONG+title+"_"*5) < table.shape[1]:
         thanks = f"({SHORT}, {LONG})"
@@ -387,7 +388,7 @@ def score_by_weighted_srgb(rgb0, rgb1):
     return np.sqrt(r*(rgb0[0]-rgb1[0])**2
                    + 4*(rgb0[1]-rgb1[1])**2
                    + b*(rgb0[2]-rgb1[2])**2)
-    
+
 
 def score_colors_my_hsv(rgb0, rgb1):
     """Metric used for rounding colors to nearest webcolor.
@@ -405,7 +406,7 @@ def score_colors_my_hsv(rgb0, rgb1):
 
 # ### end of color metric functions
 COLOR_METRIC = score_by_ciede2000  # the used color metric function
-    
+
 
 def from_raw_src(src, pxpcell, ncolors, kernel, filter_grid, save_just_pattern,
                  savesrc):
@@ -435,7 +436,7 @@ def from_raw_src(src, pxpcell, ncolors, kernel, filter_grid, save_just_pattern,
         im = do_filter_grid(im, pxpcell)
         im3 = Image.fromarray(im, mode="RGB")
         im3.save("test3_fft_filtered.png", "PNG")
-    
+
     r, c = int(im.shape[0]/pxpcell), int(im.shape[1]/pxpcell)
     kern = get_kernel(kernel, int(round(pxpcell)))
     colors = np.zeros((r, c, 3), dtype=np.uint8)
@@ -449,7 +450,7 @@ def from_raw_src(src, pxpcell, ncolors, kernel, filter_grid, save_just_pattern,
 
     # im1 = Image.fromarray(colors, mode="RGB")
     # im1.save("test1.png", "PNG")
-    
+
     clrs, inds = get_colors(colors, ncolors)
     if ncolors == 0:
         ncolors = len(clrs)
@@ -483,7 +484,7 @@ def do_filter_grid(im, pxpcell):
 
     hsv[..., 2] = val0
     return (hsv2rgb(hsv)*255).astype("uint8")
-    
+
 
 
 def get_mask(r, c, rcs, radius):
